@@ -34,12 +34,16 @@ PopupController.prototype = {
   joinButton_: null,
   createButton_: null,
   pages: [],
-  serverPromise: null,
+  serverPromise: false,
   tabs: {},
   tabId: {},
   lastId_: -2,
   startTime_: null,
   chromePromise: false,
+  nodesToPush: [],
+  viewTimesToPush: [],
+  session: null,
+  token: null,
   /**
    * A cached reference to the select element.
    *
@@ -88,6 +92,7 @@ PopupController.prototype = {
     chrome.tabs.onCreated.addListener(this.checkNewTab.bind(this));
     chrome.tabs.onActivated.addListener(this.onTabActivated.bind(this));
     chrome.tabs.onUpdated.addListener(this.tabUpdated.bind(this));
+    setTimeout(this.asyncPolling.bind(this), 1000);
   },
 
   checkNewTab(tab) {
@@ -106,6 +111,10 @@ PopupController.prototype = {
     this.chromePromise = false;
   },
 
+  onWindowFocus() { // need to implement
+
+  },
+
   onTabActivated(activeInfo) {
     if (activeInfo.windowId != this.windowId) {
         return;
@@ -118,11 +127,12 @@ PopupController.prototype = {
     } else {
         this.chromePromise = true;
     }
-
     if (this.active != undefined && this.tabs[this.active.id] >= 0 && this.pages[this.tabs[this.active.id]].start != 0) {
         var diff = new Date().getTime() - this.pages[this.tabs[this.active.id]].start;
-        this.pages[this.tabs[this.active.id]].elapsed += diff;
-        this.pages[this.tabs[this.active.id]].start = 0;
+        var page = this.pages[this.tabs[this.active.id]]
+        page.elapsed += diff;
+        page.start = 0;
+        this.viewTimesToPush.push({elapsedTime:page.elapsed, id:page.id, session: this.session, token: this.token});
     }
     this.oldActive = this.active;
     for (var key in this.tabs) {
@@ -145,7 +155,6 @@ PopupController.prototype = {
                             }
                         }
                     }
-                    var parentUrl = "";
                     var parentId = 0;
                     if (latest != null) {
 
@@ -162,6 +171,7 @@ PopupController.prototype = {
                                 serverElapsed: 0,
                                 elapsed: 0
                     });
+                    this.nodesToPush.push(this.pages[l-1]);
                     this.tabs[tab.id] = l-1;
                 }.bind(this));
 
@@ -192,7 +202,9 @@ PopupController.prototype = {
         var index = this.tabs[tab.id];
         if (index >= 0) {
             var page = this.pages[index];
-            page.start = new Date().getTime();
+            if (page.start == 0) {
+                page.start = new Date().getTime();
+            }
         }
     }
 
@@ -214,16 +226,24 @@ PopupController.prototype = {
 
     if (this.tabs[tabId] == -2) {
         chrome.tabs.get(tabId, function (tab) {
-            var l = this.pages.push({start:0,
+            var l = this.pages.push({start:new Date().getTime(),
                         url:tab.url,
                         id: this.getNextId(),
                         parentId:0,
                         serverElapsed: 0,
                         elapsed: 0
             });
+            this.nodesToPush.push(this.pages[l-1]);
             this.tabs[tab.id] = l-1;
         }.bind(this));
     } else if (this.tabs[tabId] >= 0) {
+        if (this.active != undefined && this.tabs[this.active.id] >= 0 && this.pages[this.tabs[this.active.id]].start != 0) {
+            var diff = new Date().getTime() - this.pages[this.tabs[this.active.id]].start;
+            var page = this.pages[this.tabs[this.active.id]]
+            page.elapsed += diff;
+            page.start = 0;
+            this.viewTimesToPush.push({elapsedTime:page.elapsed, id:page.id, session: this.session, token: this.token});
+        }
         chrome.tabs.get(tabId, function (tab) {
             chrome.history.getVisits({url:tab.url}, function(results) {
                 var latest = null;
@@ -234,79 +254,167 @@ PopupController.prototype = {
                         }
                     }
                 }
-                var parentUrl = "";
                 var parentId = 0;
                 if (latest != null) {
 
                     if (latest.transition == "link" || latest.transition == "form_submit") {
-                        console.log("Here we go!");
-                        console.log(this.active);
-                        console.log(this.tabs);
-                        console.log(this.pages);
                         parentId = this.pages[this.tabs[this.active.id]].id;
                     }
                 }
-                var l = this.pages.push({start:0,
+                var l = this.pages.push({start:new Date().getTime(),
                             url:tab.url,
-                            parentUrl:parentUrl,
                             id: this.getNextId(),
+                            parentId: parentId,
                             serverElapsed: 0,
                             elapsed: 0
                 });
+                this.nodesToPush.push(this.pages[l-1]);
                 this.tabs[tab.id] = l-1;
             }.bind(this));
         }.bind(this));
     }
     window.setTimeout(function () {
         this.afterDelay({tabId:tabId, windowId:this.windowId});
-    }.bind(this), 3000)
+    }.bind(this), 3000);
 
   },
 
-  /**
-   * Handle a success/failure callback from the `browsingData` API methods,
-   * updating the UI appropriately.
-   *
-   * @private
-   */
-  handleCallback_: function () {
-    var success = document.createElement('div');
-    success.classList.add('overlay');
-    success.setAttribute('role', 'alert');
-    success.textContent = 'Data has been cleared.';
-    document.body.appendChild(success);
 
-    setTimeout(function() { success.classList.add('visible'); }, 10);
-    setTimeout(function() {
-      if (close === false)
-        success.classList.remove('visible');
-      else
-        window.close();
-    }, 4000);
-  },
-
-  /**
-   * When a user clicks the button, this method is called: it reads the current
-   * state of `timeframe_` in order to pull a timeframe, then calls the clearing
-   * method with appropriate arguments.
-   *
-   * @private
-   */
   handleCreate_: function () {
     var now = new Date().getTime();
     this.createButton_.innerText = 'Creating Session...';
     this.createButton_.setAttribute('disabled', 'disabled');
 
     //API stuff goes here
-
-    chrome.windows.create({focused: true}, this.windowCallback.bind(this));
+    $.ajax({
+        url: "http://ideascape.ml/sessionmanager.php",
+        type: "POST",
+        data: JSON.stringify({mode:"create"}),
+        dataType: "json",
+        success: this.onSessionSuccess.bind(this),
+        error: this.onSessionFail.bind(this)
+    });
   },
 
   handleJoin_: function () {
     var now = new Date().getTime();
     this.joinButton_.innerText = 'Creating Session...';
     this.joinButton_.setAttribute('disabled', 'disabled');
+    var session = this.key_.innerText
+
+    $.ajax({
+        url: "http://ideascape.ml/sessionmanager.php",
+        type: "POST",
+        data: JSON.stringify({mode:"join",session:session}),
+        dataType: "json",
+        success: this.onSessionSuccess.bind(this),
+        error: this.onSessionFail.bind(this)
+    });
+  },
+  onSessionSuccess(result) {
+    this.session = result.session;
+    this.token = result.token;
+    chrome.windows.create({focused: true}, this.windowCallback.bind(this));
+  },
+  onSessionFail(xhr, ajaxOptions, thrownError) {
+    console.log("SESSION POST FAILED!");
+    console.log(xhr);
+    console.log(thrownError);
+    //TODO:
+  },
+
+//interface starts here
+
+  asyncPolling() {
+    console.log("polling");
+    if (this.serverPromise != true) {
+        this.serverPromise = true;
+        var query = this.nodesToPush.shift();
+        var viewTimes = [];
+        for (var i = this.viewTimesToPush.length - 1; i >= 0; i--) {
+            if (typeof this.viewTimesToPush[i].id != 'number') {
+                viewTimes.push(this.viewTimesToPush.splice(i,1)[0]);
+            }
+        }
+        if (!(query === undefined && viewTimes.length == 0)) {
+            if (query === undefined) {
+                query = {};
+            } else {
+                query = {url:query.url, pid:query.parentId, req:query.id, session:this.session, token:this.token};
+            }
+            var finalQuery = {query:query, viewTime:viewTimes};
+            var that = this;
+            $.ajax({
+                url: "http://ideascape.ml/update.php",
+                type: "POST",
+                data: JSON.stringify(finalQuery),
+                dataType: "json",
+                success: function (result) {
+                    return this.onSuccess(result, finalQuery);
+                }.bind(that),
+                error: function (xhr, ajaxOptions, thrownError) {
+                    return this.onFail(xhr, ajaxOptions, thrownError, finalQuery);
+                }.bind(that)
+            });
+        } else {
+            this.serverPromise = false;
+            setTimeout(this.asyncPolling.bind(this), 1000);
+        }
+
+    } else {
+        setTimeout(this.asyncPolling.bind(this), 1000);
+    }
+
+  },
+  onSuccess(result, finalQuery) {
+    console.log("success!");
+    console.log(result);
+    console.log(finalQuery);
+    if (result != null && result.query != undefined && result.query.token == this.token) {
+        var id = result.query.id;
+        var pid = result.query.pid;
+        for (var i = 0; i < this.pages.length; i++) {
+            if (this.pages[i].id == result.query.req) {
+                this.pages[i].id = id;
+                this.pages[i].pid = pid;
+            }
+            if (this.pages[i].pid == result.query.req) {
+                this.pages[i].pid = id;
+            }
+        }
+        for (var j = 0; j < this.nodesToPush.length; j++) {
+            if (this.nodesToPush[j].id == result.query.req) {
+                this.nodesToPush[j].id = id;
+                this.nodesToPush[j].pid = pid;
+            }
+            if (this.nodesToPush[j].pid == result.query.req) {
+                this.nodesToPush[j].pid = id;
+            }
+        }
+        for (var k = 0; k < this.viewTimesToPush.length; k++) {
+            if (this.viewTimes[k].id == result.query.req) {
+                this.viewTimes[k].id = id;
+            }
+        }
+    } else {
+        if (result.query != {} || finalQuery.query != {}) {
+            console.log("error, should have return query");
+            console.log(result);
+        }
+    }
+    this.serverPromise = false;
+    setTimeout(this.asyncPolling.bind(this), 1000);
+  },
+  onFail(xhr, ajaxOptions, thrownError, finalQuery) {
+    console.log("POST FAILED!");
+    console.log(xhr);
+    console.log(thrownError);
+    //TODO: need to re-add back into lists!
+    this.serverPromise = false;
+    setTimeout(this.asyncPolling.bind(this), 1000);
   }
+
+
 };
 
 document.addEventListener('DOMContentLoaded', function () {
