@@ -7,22 +7,24 @@
     <script src="popup.js"></script>
   </head>
   <body>
-    <h1>BrowsingData API Sample</h1>
-    <div role="main">
-      <form>
-        <label for="newsession">Create new Session:</label>
-        <button id="newsession">Create!</button>
-        <label for="joinsession">Join Existing Session:</label>
-        <input type="text" id="joinsession" name="sessionID">
-        <!-- <select id="timeframe">
-          <option value="hour">the past hour</option>
-          <option value="day">the past day</option>
-          <option value="week">the past week</option>
-          <option value="4weeks">the past four weeks</option>
-          <option value="forever">the beginning of time</option>
-        </select> -->
-        <button id="joinButton">Join!</button>
-      </form>
+    <h1>ImageScope Session Manager</h1>
+    <div id="wrapper">
+        <div id="sessionOff" role="main">
+          <form>
+            <label for="newsession">Create new Session:</label>
+            <button id="newsession">Create!</button>
+            <label for="joinsession">Join Existing Session:</label>
+            <input type="text" id="joinsession" name="sessionID">
+            <button id="joinButton">Join!</button>
+            <div id="errorField" style="color:#FF0000;"></div>
+          </form>
+        </div>
+        <div id="sessionOn">
+            <span style="padding-bottom:5px">ImageScope is currently in Session.</span> <br>
+            <span>Current Session ID: </span><span id="currentSession"></span> <br>
+            Go to session page: <a id="sessionUrl" href=""></a> <br>
+            <button id="sessionEnd">End Session</button>
+        </div>
     </div>
   </body>
 </html>
