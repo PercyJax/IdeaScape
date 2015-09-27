@@ -64,8 +64,8 @@ PopupController.prototype = {
         this.offDiv_.detach();
         this.wrapperDiv_.append(this.onDiv_);
         this.currentSession_.innerText = session;
-        this.sessionUrl_.innerText = "imagescape.ml/?session=" + session;
-        this.sessionUrl_.href = "http://www.imagescape.ml/?session=" + session;
+        this.sessionUrl_.innerText = "ideascope.ml/?session=" + session;
+        this.sessionUrl_.href = "http://www.ideascope.ml/?session=" + session;
 
     },
     setErrorField(text) {
