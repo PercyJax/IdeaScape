@@ -81,18 +81,19 @@ BackgroundController.prototype = {
       chrome.tabs.onCreated.removeListener(this.boundCheckNewTab);
       chrome.tabs.onActivated.removeListener(this.boundOnTabActivated);
       chrome.tabs.onUpdated.removeListener(this.boundTabUpdated);
+      console.log("R");
       //need to completely clean all instance variables:
-      pages: [],
-      serverPromise: false,
-      tabs: {},
-      tabId: {},
-      lastId_: -2,
-      startTime_: null,
-      chromePromise: false,
-      nodesToPush: [],
-      viewTimesToPush: [],
-      session: null,
-      token: null,
+      this.pages = [];
+      this.serverPromise = false;
+      this.tabs = {};
+      this.tabId = {};
+      this.lastId_ = -2;
+      this.startTime_ = null;
+      this.chromePromise = false;
+      this.nodesToPush = [];
+      this.viewTimesToPush = [];
+      this.session = null;
+      this.token = null;
 
 
 
@@ -257,9 +258,11 @@ BackgroundController.prototype = {
 
   tabUpdated(tabId, changeDict, tab) {
     if (tab.windowId != this.windowId || changeDict.url == undefined || changeDict.url.slice(0,6) == "chrome") {
+        if (tab.windowId == this.windowId && (this.tabs[tabId] == undefined || this.tabs[tabId] < 0)) {
+;            this.tabs[tabId] = -2;
+        }
         return;
     }
-
     if (this.chromePromise == true) {
         return setTimeout(function () {
             this.tabUpdated(tabId, changeDict, tab);
@@ -267,19 +270,16 @@ BackgroundController.prototype = {
     } else {
         this.chromePromise = true;
     }
-
-    if (this.tabs[tabId] == -2) {
-        chrome.tabs.get(tabId, function (tab) {
-            var l = this.pages.push({start:new Date().getTime(),
-                        url:tab.url,
-                        id: this.getNextId(),
-                        parentId:0,
-                        serverElapsed: 0,
-                        elapsed: 0
-            });
-            this.nodesToPush.push(this.pages[l-1]);
-            this.tabs[tab.id] = l-1;
-        }.bind(this));
+    if (this.tabs[tabId] < 0) {
+        var l = this.pages.push({start:new Date().getTime(),
+                    url:tab.url,
+                    id: this.getNextId(),
+                    parentId:0,
+                    serverElapsed: 0,
+                    elapsed: 0
+        });
+        this.nodesToPush.push(this.pages[l-1]);
+        this.tabs[tab.id] = l-1;
     } else if (this.tabs[tabId] >= 0) {
         if (this.active != undefined && this.tabs[this.active.id] >= 0 && this.pages[this.tabs[this.active.id]].start != 0) {
             var diff = new Date().getTime() - this.pages[this.tabs[this.active.id]].start;
@@ -288,33 +288,31 @@ BackgroundController.prototype = {
             page.start = 0;
             this.viewTimesToPush.push({elapsedTime:page.elapsed, id:page.id, session: this.session, token: this.token});
         }
-        chrome.tabs.get(tabId, function (tab) {
-            chrome.history.getVisits({url:tab.url}, function(results) {
-                var latest = null;
-                for (var i = 0; i < results.length; i++) {
-                    if ((latest == null && results[i].visitTime != undefined) || (results[i].visitTime != undefined && results[i].visitTime > latest.visitTime)) {
-                        if (results[i].visitTime > this.startTime_) {
-                            latest = results[i];
-                        }
+        chrome.history.getVisits({url:tab.url}, function(results) {
+            var latest = null;
+            for (var i = 0; i < results.length; i++) {
+                if ((latest == null && results[i].visitTime != undefined) || (results[i].visitTime != undefined && results[i].visitTime > latest.visitTime)) {
+                    if (results[i].visitTime > this.startTime_) {
+                        latest = results[i];
                     }
                 }
-                var parentId = 0;
-                if (latest != null) {
+            }
+            var parentId = 0;
+            if (latest != null) {
 
-                    if (latest.transition == "link" || latest.transition == "form_submit") {
-                        parentId = this.pages[this.tabs[this.active.id]].id;
-                    }
+                if (latest.transition == "link" || latest.transition == "form_submit") {
+                    parentId = this.pages[this.tabs[this.active.id]].id;
                 }
-                var l = this.pages.push({start:new Date().getTime(),
-                            url:tab.url,
-                            id: this.getNextId(),
-                            parentId: parentId,
-                            serverElapsed: 0,
-                            elapsed: 0
-                });
-                this.nodesToPush.push(this.pages[l-1]);
-                this.tabs[tab.id] = l-1;
-            }.bind(this));
+            }
+            var l = this.pages.push({start:new Date().getTime(),
+                        url:tab.url,
+                        id: this.getNextId(),
+                        parentId: parentId,
+                        serverElapsed: 0,
+                        elapsed: 0
+            });
+            this.nodesToPush.push(this.pages[l-1]);
+            this.tabs[tab.id] = l-1;
         }.bind(this));
     }
     window.setTimeout(function () {
