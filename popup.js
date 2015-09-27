@@ -41,6 +41,13 @@ PopupController.prototype = {
         var session = this.key_.value;
         if (session == "") {
             this.errorField_.innerText = "Session ID required.";
+            setTimeout(function () {
+                this.joinButton_.innerText = 'Join!';
+                this.joinButton_.disabled = false;
+            }.bind(this), 100);
+
+
+
             return;
         }
         this.BC.handleJoin_(session);
@@ -48,7 +55,7 @@ PopupController.prototype = {
     endSession() {
       this.onDiv_.detach();
       this.wrapperDiv_.append(this.offDiv_);
-      this.createButton_.innerText = 'Start!';
+      this.createButton_.innerText = 'Create!';
       this.createButton_.disabled = false;
       this.joinButton_.innerText = 'Join!';
       this.joinButton_.disabled = false;
@@ -63,6 +70,12 @@ PopupController.prototype = {
     },
     setErrorField(text) {
         this.errorField_.innerText = text;
+        setTimeout(function () {
+            this.createButton_.innerText = 'Create!';
+            this.createButton_.disabled = false;
+            this.joinButton_.innerText = 'Join!';
+            this.joinButton_.disabled = false;
+        }.bind(this), 100);
     }
 }
 
